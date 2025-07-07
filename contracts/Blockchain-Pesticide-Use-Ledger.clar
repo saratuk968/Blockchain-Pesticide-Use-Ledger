@@ -8,6 +8,11 @@
 (define-data-var next-farm-id uint u1)
 (define-data-var next-application-id uint u1)
 
+(define-constant ERR_INVALID_YIELD (err u105))
+(define-constant ERR_HARVEST_EXISTS (err u106))
+
+(define-data-var next-harvest-id uint u1)
+
 (define-map farms
     { farm-id: uint }
     {
@@ -354,6 +359,139 @@
         )
         (if (and (is-some app-data) (not (get verified (unwrap-panic app-data))))
             (unwrap! (as-max-len? (append acc application-id) u200) acc)
+            acc
+        )
+    )
+)
+
+
+(define-map harvest-records
+    { harvest-id: uint }
+    {
+        farm-id: uint,
+        farmer: principal,
+        crop-type: (string-ascii 50),
+        harvest-date: uint,
+        total-yield-kg: uint,
+        area-harvested: uint,
+        quality-grade: (string-ascii 20),
+        organic-harvest: bool,
+        season: (string-ascii 20)
+    }
+)
+
+(define-map farm-harvests
+    { farm-id: uint }
+    { harvest-ids: (list 100 uint) }
+)
+
+(define-map seasonal-yields
+    { farm-id: uint, season: (string-ascii 20) }
+    { total-yield: uint, total-area: uint, harvest-count: uint }
+)
+
+(define-public (record-harvest 
+    (farm-id uint)
+    (crop-type (string-ascii 50))
+    (total-yield-kg uint)
+    (area-harvested uint)
+    (quality-grade (string-ascii 20))
+    (season (string-ascii 20))
+)
+    (let
+        (
+            (harvest-id (var-get next-harvest-id))
+            (farm-data (unwrap! (map-get? farms { farm-id: farm-id }) ERR_NOT_FOUND))
+            (current-harvests (default-to (list) (get harvest-ids (map-get? farm-harvests { farm-id: farm-id }))))
+            (seasonal-data (default-to { total-yield: u0, total-area: u0, harvest-count: u0 } 
+                           (map-get? seasonal-yields { farm-id: farm-id, season: season })))
+        )
+        (asserts! (is-eq tx-sender (get owner farm-data)) ERR_UNAUTHORIZED)
+        (asserts! (> total-yield-kg u0) ERR_INVALID_YIELD)
+        (asserts! (> area-harvested u0) ERR_INVALID_YIELD)
+        (asserts! (<= area-harvested (get size-hectares farm-data)) ERR_INVALID_INPUT)
+        (asserts! (> (len crop-type) u0) ERR_INVALID_INPUT)
+        (map-set harvest-records
+            { harvest-id: harvest-id }
+            {
+                farm-id: farm-id,
+                farmer: tx-sender,
+                crop-type: crop-type,
+                harvest-date: stacks-block-height,
+                total-yield-kg: total-yield-kg,
+                area-harvested: area-harvested,
+                quality-grade: quality-grade,
+                organic-harvest: (get organic-certified farm-data),
+                season: season
+            }
+        )
+        (map-set farm-harvests
+            { farm-id: farm-id }
+            { harvest-ids: (unwrap! (as-max-len? (append current-harvests harvest-id) u100) ERR_INVALID_INPUT) }
+        )
+        (map-set seasonal-yields
+            { farm-id: farm-id, season: season }
+            {
+                total-yield: (+ (get total-yield seasonal-data) total-yield-kg),
+                total-area: (+ (get total-area seasonal-data) area-harvested),
+                harvest-count: (+ (get harvest-count seasonal-data) u1)
+            }
+        )
+        (var-set next-harvest-id (+ harvest-id u1))
+        (ok harvest-id)
+    )
+)
+
+(define-read-only (get-harvest-record (harvest-id uint))
+    (map-get? harvest-records { harvest-id: harvest-id })
+)
+
+(define-read-only (get-farm-harvests (farm-id uint))
+    (map-get? farm-harvests { farm-id: farm-id })
+)
+
+(define-read-only (calculate-yield-per-hectare (farm-id uint) (season (string-ascii 20)))
+    (let
+        (
+            (seasonal-data (map-get? seasonal-yields { farm-id: farm-id, season: season }))
+        )
+        (if (is-some seasonal-data)
+            (let
+                (
+                    (data (unwrap-panic seasonal-data))
+                    (total-yield (get total-yield data))
+                    (total-area (get total-area data))
+                )
+                (if (> total-area u0)
+                    (ok (/ total-yield total-area))
+                    (ok u0)
+                )
+            )
+            (ok u0)
+        )
+    )
+)
+
+(define-read-only (get-seasonal-summary (farm-id uint) (season (string-ascii 20)))
+    (map-get? seasonal-yields { farm-id: farm-id, season: season })
+)
+
+(define-read-only (get-total-harvest-value (farm-id uint))
+    (let
+        (
+            (harvests (default-to (list) (get harvest-ids (map-get? farm-harvests { farm-id: farm-id }))))
+        )
+        (fold sum-harvest-yields harvests u0)
+    )
+)
+
+(define-private (sum-harvest-yields (harvest-id uint) (acc uint))
+    (let
+        (
+            (harvest-data (map-get? harvest-records { harvest-id: harvest-id }))
+        )
+        (if (is-some harvest-data)
+            (+ acc (get total-yield-kg (unwrap-panic harvest-data)))
             acc
         )
     )
