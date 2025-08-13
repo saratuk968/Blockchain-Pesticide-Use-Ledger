@@ -9,6 +9,11 @@ requirements = []
 path = 'contracts/Blockchain-Pesticide-Use-Ledger.clar'
 clarity_version = 3
 epoch = 3.1
+
+[contracts.pesticide-residue-monitor]
+path = 'contracts/pesticide-residue-monitor.clar'
+clarity_version = 3
+epoch = 3.1
 [repl.analysis]
 passes = ['check_checker']
 
