@@ -1,0 +1,38 @@
+[project]
+name = 'Blockchain-Pesticide-Use-Ledger'
+description = ''
+authors = []
+telemetry = true
+cache_dir = '.\.cache'
+requirements = []
+[contracts.Blockchain-Pesticide-Use-Ledger]
+path = 'contracts/Blockchain-Pesticide-Use-Ledger.clar'
+clarity_version = 3
+epoch = 3.1
+
+[contracts.pesticide-residue-monitor]
+path = 'contracts/pesticide-residue-monitor.clar'
+clarity_version = 3
+epoch = 3.1
+
+[contracts.pesticide-alert-system]
+path = 'contracts/pesticide-alert-system.clar'
+clarity_version = 3
+epoch = 3.1
+[contracts.pesticide-batch-tracker]
+path = 'contracts/pesticide-batch-tracker.clar'
+clarity_version = 3
+epoch = 3.1
+
+[repl.analysis]
+passes = ['check_checker']
+
+[repl.analysis.check_checker]
+strict = false
+trusted_sender = false
+trusted_caller = false
+callee_filter = false
+
+[repl.remote_data]
+enabled = false
+api_url = 'https://api.hiro.so'
